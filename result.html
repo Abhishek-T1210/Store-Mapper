@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TSC Store Mapper 2.0 - Results</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        body {
+            background: linear-gradient(to bottom right, #1e40af, #3b82f6);
+            font-family: 'Inter', sans-serif;
+        }
+        .card {
+            transform: translateY(0);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.15);
+        }
+        .btn {
+            transition: background-color 0.3s ease, transform 0.2s ease;
+        }
+        .btn:hover {
+            transform: scale(1.05);
+        }
+        .progress-bar {
+            transition: width 0.3s ease;
+        }
+        table {
+            table-layout: fixed;
+            width: 100%;
+        }
+        th, td {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .pincode-header {
+            background-color: #1e40af;
+            color: white;
+            font-weight: 700;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+    <!-- Header -->
+    <header class="bg-white shadow-md">
+        <div class="max-w-7xl mx-auto py-4 px-6">
+            <h1 class="text-2xl font-bold text-blue-900">TSC Store Mapper 2.0</h1>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-grow p-8">
+        <div class="max-w-5xl mx-auto">
+            <h2 class="text-xl font-semibold text-gray-800 mb-6">Store Results</h2>
+            <div class="mb-6 bg-white p-6 rounded-xl shadow-lg card">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-sm font-medium text-gray-700">Processing Progress</span>
+                    <span id="progressText" class="text-sm font-medium text-blue-700">0%</span>
+                </div>
+                <div class="w-full bg-gray-200 rounded-full h-3">
+                    <div id="progressBar" class="bg-blue-600 h-3 rounded-full progress-bar" style="width: 0%"></div>
+                </div>
+            </div>
+            <button id="exportBtn" class="hidden mb-6 bg-green-600 text-white py-3 px-6 rounded-lg font-medium btn hover:bg-green-700">Export to Excel</button>
+            <div id="results" class="space-y-6"></div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-gray-800 text-white py-4">
+        <div class="max-w-7xl mx-auto text-center">
+            <p class="text-sm font-medium">Product by Abhishek Tiwari</p>
+        </div>
+    </footer>
+
+    <script>
+        let storeData = [];
+        const targetOrigin = window.location.origin; // e.g., http://127.0.0.1:3000
+
+        window.addEventListener('message', (event) => {
+            if (event.origin !== targetOrigin) {
+                console.warn('Ignoring message from invalid origin:', event.origin);
+                return;
+            }
+            console.log('Raw message data:', event.data); // Debug log
+            if (typeof event.data !== 'string') {
+                console.warn('Ignoring non-string message:', event.data);
+                return;
+            }
+            try {
+                const message = JSON.parse(event.data);
+                if (message.type !== 'storeData') {
+                    console.warn('Ignoring non-storeData message:', message);
+                    return;
+                }
+                const data = message.data;
+                console.log('Parsed data:', data); // Debug log
+                storeData = data.storeData;
+                const { total, processed } = data;
+
+                // Update progress bar
+                const progress = Math.min((processed / total) * 100, 100);
+                document.getElementById('progressBar').style.width = `${progress}%`;
+                document.getElementById('progressText').textContent = `${Math.round(progress)}%`;
+
+                // Display results
+                const resultsEl = document.getElementById('results');
+                resultsEl.innerHTML = '';
+                storeData.forEach(({ pincode, stores }, index) => {
+                    const pincodeSection = document.createElement('div');
+                    pincodeSection.className = 'mb-6';
+                    pincodeSection.innerHTML = `
+                        <h3 class="pincode-header text-lg">Pincode: ${pincode}</h3>
+                        <div class="bg-white p-6 rounded-xl shadow-lg card overflow-x-auto">
+                            <table class="w-full text-sm text-gray-600 border-collapse">
+                                <thead>
+                                    <tr class="bg-gray-100">
+                                        <th class="border p-2 text-left w-20">Store ID</th>
+                                        <th class="border p-2 text-left w-48">Store Name</th>
+                                        <th class="border p-2 text-left w-24">Distance (km)</th>
+                                        <th class="border p-2 text-left w-24">Map Link</th>
+                                        <th class="border p-2 text-left w-24">Contact</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${stores.map(store => `
+                                        <tr>
+                                            <td class="border p-2">${store.storeId || 'N/A'}</td>
+                                            <td class="border p-2">${store.storeName || 'N/A'}</td>
+                                            <td class="border p-2">${store.distance != null ? store.distance : 'N/A'}</td>
+                                            <td class="border p-2"><a href="${store.mapLink || '#'}" target="_blank" class="text-blue-600 hover:underline">${store.mapLink ? 'View Map' : 'N/A'}</a></td>
+                                            <td class="border p-2">${store.contact || 'N/A'}</td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                        ${index < storeData.length - 1 ? '<hr class="my-4 border-gray-300">' : ''}
+                    `;
+                    resultsEl.appendChild(pincodeSection);
+                });
+
+                // Show export button when complete
+                if (processed >= total) {
+                    document.getElementById('exportBtn').classList.remove('hidden');
+                }
+            } catch (error) {
+                console.error('Error processing message:', error);
+                document.getElementById('results').innerHTML = `<p class="text-red-600 text-center">Failed to load results: ${error.message}</p>`;
+            }
+        });
+
+        document.getElementById('exportBtn').addEventListener('click', () => {
+            const wsData = [
+                ['Pincode', 'Store ID', 'Store Name', 'Distance (km)', 'Map Link', 'Contact']
+            ];
+            storeData.forEach(({ pincode, stores }) => {
+                stores.forEach(store => {
+                    wsData.push([
+                        pincode,
+                        store.storeId || 'N/A',
+                        store.storeName || 'N/A',
+                        store.distance != null ? store.distance : 'N/A',
+                        store.mapLink || 'N/A',
+                        store.contact || 'N/A'
+                    ]);
+                });
+            });
+
+            try {
+                const ws = XLSX.utils.aoa_to_sheet(wsData);
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, 'Stores');
+                const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+                const blob = new Blob([wbout], { type: 'application/octet-stream' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'store_data.xlsx';
+                a.click();
+                URL.revokeObjectURL(url);
+            } catch (error) {
+                console.error('Export error:', error);
+                document.getElementById('results').innerHTML = `<p class="text-red-600 text-center">Failed to export to Excel: ${error.message}</p>`;
+            }
+        });
+    </script>
+</body>
+</html>
